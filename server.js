@@ -8,6 +8,7 @@ const {
   encryptPhoneNumber,
   decryptPhoneNumber,
   saveMessage,
+  checkUserType,
 } = require("./utils");
 const pool = require("./db");
 const saltRounds = 10;
@@ -19,6 +20,7 @@ const saltRounds = 10;
 const OnlineUsers = new Map();
 
 const cors = require("cors");
+const { getAIResponse } = require("./aichat");
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
@@ -171,7 +173,7 @@ app.get("/api/getfriends", async (req, res) => {
       return res.json([]);
     }
     const userQuery = `
-    SELECT id AS friend_id, nickname, avatar
+    SELECT id AS friend_id, nickname, avatar, isbot
     FROM users
     WHERE id IN (?)
   `;
@@ -187,11 +189,9 @@ app.get("/api/getfriends", async (req, res) => {
 
 wss.on("connection", (ws, req) => {
   console.log("Client connected from:", req.socket.remoteAddress);
-
-  // 监听来自客户端的消息
   ws.on("message", async (data) => {
     const parsedData = JSON.parse(data);
-    console.log(`Received message: ${parsedData}`);
+    console.log(`Received message: ${parsedData.type}`);
     let token = parsedData.token;
     let userId = verifyToken(token);
     switch (parsedData.type) {
@@ -201,29 +201,86 @@ wss.on("connection", (ws, req) => {
         ws.send("Welcome to the WebSocket server!");
         break;
       case "sendMessage":
-        console.log(parsedData);
+        //console.log(parsedData);
         const sender_id = ws.userId;
-        console.log(sender_id);
+        console.log(`senderid: ${sender_id}`);
         const receiver_id = parsedData.receiverId;
-        const content = parsedData.content;
-        if (OnlineUsers.has(receiver_id)) {
-          const receiverWs = OnlineUsers.get(receiver_id);
-          receiverWs.send(
-            JSON.stringify({
-              type: "message",
-              sender_id,
-              content,
-              timestamp: new Date().toISOString(),
-            })
-          );
+        console.log(`receiverid: ${receiver_id}`);
+        const usertype = await checkUserType(receiver_id).catch((error) => {
+          console.error("Error:", error.message);
+        }); // true for bot
+        console.log(`usertype: ${usertype}`);
+        if (!usertype) {
+          const content = parsedData.content;
+          console.log("The receiver is human");
+          if (OnlineUsers.has(receiver_id)) {
+            const receiverWs = OnlineUsers.get(receiver_id);
+            receiverWs.send(
+              JSON.stringify({
+                type: "message",
+                sender_id,
+                content,
+                timestamp: new Date().toISOString(),
+              })
+            );
 
-          await saveMessage(sender_id, receiver_id, content, true);
-          console.log(`Message from ${sender_id} to ${receiver_id} forwarded.`);
+            await saveMessage(sender_id, receiver_id, content, true);
+            console.log(
+              `Message from ${sender_id} to ${receiver_id} forwarded.`
+            );
+          } else {
+            await saveMessage(sender_id, receiver_id, content, false);
+            console.log(
+              `Message from ${sender_id} to ${receiver_id} saved as undelivered.`
+            );
+          }
         } else {
-          await saveMessage(sender_id, receiver_id, content, false);
-          console.log(
-            `Message from ${sender_id} to ${receiver_id} saved as undelivered.`
+          console.log("The receiver is bot");
+          const messages = parsedData.historyMessages;
+          const lastmessage = messages.at(-1);
+          saveMessage(
+            lastmessage.sender_id,
+            lastmessage.receiver_id,
+            lastmessage.content,
+            true
           );
+          //console.log(messages);
+          const modelId = "Qwen/Qwen2-7B-Instruct-GGUF";
+          const apiKey = "7861e011-ca80-4dcb-b9fe-0801460a4087";
+          const baseUrl =
+            "https://ms-fc-2ef7dfba-37f9.api-inference.modelscope.cn/v1";
+          const response = await getAIResponse(
+            modelId,
+            messages,
+            apiKey,
+            baseUrl,
+            sender_id
+          );
+          if (OnlineUsers.has(sender_id)) {
+            const senderWs = OnlineUsers.get(sender_id);
+            senderWs.send(
+              JSON.stringify({
+                type: "message",
+                receiver_id,
+                response,
+                timestamp: new Date().toISOString(),
+              })
+            );
+            saveMessage(
+              lastmessage.receiver_id,
+              lastmessage.sender_id,
+              response,
+              true
+            );
+          } else {
+            saveMessage(
+              lastmessage.receiver_id,
+              lastmessage.sender_id,
+              response,
+              false
+            );
+          }
+          console.log(response);
         }
         break;
       case "sendFriendRequest":
@@ -285,8 +342,11 @@ app.post("/api/fetchChatHistory", async (req, res) => {
       user_id,
       parseInt(n),
     ]);
-    res.json({ messages: results });
-    //console.log(results);
+    const reorderedResults = results.map((message, index) => {
+      return { ...message, message_id: index + 1 };
+    });
+    res.json({ messages: reorderedResults });
+    //console.log(reorderedResults);
   } catch (err) {
     console.error("Database error:", err.message);
     res.status(500).json({ error: "Database query failed" });

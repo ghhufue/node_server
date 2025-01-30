@@ -44,4 +44,23 @@ async function saveMessage(sender_id, receiver_id, content, is_received) {
     );
   });
 }
-module.exports = { encryptPhoneNumber, decryptPhoneNumber, saveMessage };
+async function checkUserType(userId) {
+  const query = "SELECT isbot FROM users WHERE id = ?";
+  try {
+    const [results] = await pool.query(query, [userId]);
+    if (results.length === 0) {
+      throw new Error(`User with ID ${userId} not found.`);
+    }
+    const isBot = results[0].isbot;
+    return isBot === 1;
+  } catch (err) {
+    throw new Error(`Error in checkUserType: ${err.message}`);
+  }
+}
+
+module.exports = {
+  encryptPhoneNumber,
+  decryptPhoneNumber,
+  saveMessage,
+  checkUserType,
+};
