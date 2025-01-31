@@ -24,16 +24,16 @@ function decryptPhoneNumber(encryptedData, ivHex) {
   return decrypted;
 }
 
-async function saveMessage(sender_id, receiver_id, content, is_received) {
+async function saveMessage(sender_id, receiver_id, content, message_type, is_received) {
   //console.log('Pool:', pool);
   const query = `
-    INSERT INTO messages (sender_id, receiver_id, content, is_received)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO messages (sender_id, receiver_id, content, message_type, is_received)
+    VALUES (?, ?, ?, ?, ?)
   `;
   return new Promise((resolve, reject) => {
     pool.query(
       query,
-      [sender_id, receiver_id, content, is_received],
+      [sender_id, receiver_id, content, message_type, is_received],
       (err, results) => {
         if (err) {
           console.error("Error saving message to database:", err.message);
