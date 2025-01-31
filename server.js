@@ -206,6 +206,8 @@ wss.on("connection", (ws, req) => {
         console.log(`senderid: ${sender_id}`);
         const receiver_id = parsedData.receiverId;
         console.log(`receiverid: ${receiver_id}`);
+        const message_type = parsedData.message_type;
+        console.log(`message type: ${message_type}`);
         const usertype = await checkUserType(receiver_id).catch((error) => {
           console.error("Error:", error.message);
         }); // true for bot
@@ -224,14 +226,14 @@ wss.on("connection", (ws, req) => {
               })
             );
 
-            await saveMessage(sender_id, receiver_id, content, true);
+            await saveMessage(sender_id, receiver_id, content, message_type, true);
             console.log(
-              `Message from ${sender_id} to ${receiver_id} forwarded.`
+              `Message from ${sender_id} to ${receiver_id}, type ${message_type} forwarded.`
             );
           } else {
-            await saveMessage(sender_id, receiver_id, content, false);
+            await saveMessage(sender_id, receiver_id, content, message_type, false);
             console.log(
-              `Message from ${sender_id} to ${receiver_id} saved as undelivered.`
+              `Message from ${sender_id} to ${receiver_id}, type ${message_type} saved as undelivered.`
             );
           }
         } else {
@@ -242,6 +244,7 @@ wss.on("connection", (ws, req) => {
             lastmessage.sender_id,
             lastmessage.receiver_id,
             lastmessage.content,
+            `"${lastmessage.messageType}"`,
             true
           );
           //console.log(messages);
@@ -270,6 +273,7 @@ wss.on("connection", (ws, req) => {
               lastmessage.receiver_id,
               lastmessage.sender_id,
               response,
+              `"${lastmessage.messageType}"`,
               true
             );
           } else {
@@ -277,6 +281,7 @@ wss.on("connection", (ws, req) => {
               lastmessage.receiver_id,
               lastmessage.sender_id,
               response,
+              `"${lastmessage.messageType}"`,
               false
             );
           }
@@ -358,3 +363,6 @@ const PORT = 3000;
 server.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
+
+// some random changes
+// learning to use git
