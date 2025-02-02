@@ -24,7 +24,13 @@ function decryptPhoneNumber(encryptedData, ivHex) {
   return decrypted;
 }
 
-async function saveMessage(sender_id, receiver_id, content, message_type, is_received) {
+async function saveMessage(
+  sender_id,
+  receiver_id,
+  content,
+  message_type,
+  is_received
+) {
   //console.log('Pool:', pool);
   const query = `
     INSERT INTO messages (sender_id, receiver_id, content, message_type, is_received)
@@ -44,6 +50,51 @@ async function saveMessage(sender_id, receiver_id, content, message_type, is_rec
     );
   });
 }
+async function saveFriendRequest(sender_id, receiver_id, status) {
+  try {
+    const checkQuery = `
+      SELECT * FROM friends 
+      WHERE user_id = ? AND friend_id = ?
+    `;
+    const [existingRequest] = await pool.query(checkQuery, [
+      sender_id,
+      receiver_id,
+    ]);
+
+    if (existingRequest.length > 0) {
+      const updateQuery = `
+        UPDATE friends 
+        SET status = ?, created_at = NOW() 
+        WHERE user_id = ? AND friend_id = ?
+      `;
+
+      const [updateResult] = await pool.query(updateQuery, [
+        status,
+        sender_id,
+        receiver_id,
+      ]);
+      console.log("Updated friend request");
+      //return updateResult;
+    } else {
+      const insertQuery = `
+        INSERT INTO friends (user_id, friend_id, status, created_at ) 
+        VALUES (?, ?, ?, NOW())
+      `;
+
+      const [insertResult] = await pool.query(insertQuery, [
+        sender_id,
+        receiver_id,
+        status,
+      ]);
+      console.log("Inserted new friend request");
+      //return insertResult;
+    }
+  } catch (error) {
+    console.error("Error saving/updating friend request:", error);
+    throw error;
+  }
+}
+
 async function checkUserType(userId) {
   const query = "SELECT isbot FROM users WHERE id = ?";
   try {
@@ -57,10 +108,28 @@ async function checkUserType(userId) {
     throw new Error(`Error in checkUserType: ${err.message}`);
   }
 }
-
+async function getUserProfile(userId) {
+  try {
+    const query = `SELECT nickname, avatar FROM users WHERE id = ? LIMIT 1`;
+    const [rows] = await pool.query(query, [userId]);
+    if (rows.length > 0) {
+      return {
+        nickname: rows[0].nickname,
+        avatar: rows[0].avatar,
+      };
+    } else {
+      return null; // 用户不存在
+    }
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    return null;
+  }
+}
 module.exports = {
   encryptPhoneNumber,
   decryptPhoneNumber,
   saveMessage,
   checkUserType,
+  saveFriendRequest,
+  getUserProfile,
 };
