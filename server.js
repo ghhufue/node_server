@@ -11,6 +11,18 @@ const {
   checkUserType,
 } = require("./utils");
 const pool = require("./db");
+const env = require("./env");
+var sdk = require('@baiducloud/sdk');
+var BosClient = sdk.BosClient;
+const config = {
+  endpoint: 'su.bcebos.com',         //传入Bucket所在区域域名
+  credentials: {
+      ak: env.CLOUD_API_KEY,         //您的AccessKey
+      sk: env.SECRET_KEY       //您的SecretAccessKey
+  }
+};
+const bucket = 'aichatapp-image';
+
 const saltRounds = 10;
 /**
  * @param {import('express').Request} req - The request object
@@ -357,12 +369,29 @@ app.post("/api/fetchChatHistory", async (req, res) => {
     res.status(500).json({ error: "Database query failed" });
   }
 });
+app.post("/api/putImage", async (req, res) => {
+  let client = new BosClient(config);
+  client.putObject(bucket, req.header("Object-Key"), req.body).then(function (response) {
+    // console.log('Put object:', response.body);
+  }).catch(function (error) {
+    console.error('Error:', error);
+    return res.status(500).json({ error: "Internal server error" });
+  });
+  return res.status(200).json({ success: true }); 
+});
+app.post("/api/fetchImage", async (req, res) => {
+  let client = new BosClient(config);
+  client.getObject(bucket, req.header("Object-Key")).then(function (response) {
+    // console.log('Get object:', response.body);
+  }).catch(function (error) {
+    console.error('Error:', error);
+    return res.status(500).json({ error: "Internal server error" });
+  });
+  return res.status(200).send(response.body);
+});
 
 // 启动服务器
 const PORT = 3000;
 server.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
-
-// some random changes
-// learning to use git
