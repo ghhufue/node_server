@@ -9,6 +9,8 @@ const {
   decryptPhoneNumber,
   saveMessage,
   checkUserType,
+  saveFriendRequest,
+  getUserProfile,
 } = require("./utils");
 const pool = require("./db");
 const saltRounds = 10;
@@ -42,6 +44,19 @@ app.get("/api/getuser", async (req, res) => {
   }
   try {
     const [results] = await pool.query("SELECT * FROM users");
+    res.json(results);
+  } catch (err) {
+    console.error("Database query failed:", err);
+    res.status(500).json({ error: "Database query failed" });
+  }
+});
+
+app.get("/api/getfriendlist", async (req, res) => {
+  if (!pool) {
+    return res.status(500).send("Database not initialized");
+  }
+  try {
+    const [results] = await pool.query("SELECT * FROM friends");
     res.json(results);
   } catch (err) {
     console.error("Database query failed:", err);
@@ -219,19 +234,31 @@ wss.on("connection", (ws, req) => {
             const receiverWs = OnlineUsers.get(receiver_id);
             receiverWs.send(
               JSON.stringify({
-                type: "message",
+                type: "newMessage",
                 sender_id,
                 content,
                 timestamp: new Date().toISOString(),
               })
             );
 
-            await saveMessage(sender_id, receiver_id, content, message_type, true);
+            await saveMessage(
+              sender_id,
+              receiver_id,
+              content,
+              message_type,
+              true
+            );
             console.log(
               `Message from ${sender_id} to ${receiver_id}, type ${message_type} forwarded.`
             );
           } else {
-            await saveMessage(sender_id, receiver_id, content, message_type, false);
+            await saveMessage(
+              sender_id,
+              receiver_id,
+              content,
+              message_type,
+              false
+            );
             console.log(
               `Message from ${sender_id} to ${receiver_id}, type ${message_type} saved as undelivered.`
             );
@@ -263,7 +290,7 @@ wss.on("connection", (ws, req) => {
             const senderWs = OnlineUsers.get(sender_id);
             senderWs.send(
               JSON.stringify({
-                type: "message",
+                type: "newMessage",
                 receiver_id,
                 response,
                 timestamp: new Date().toISOString(),
@@ -290,23 +317,28 @@ wss.on("connection", (ws, req) => {
         break;
       case "sendFriendRequest":
         const friend_id = parsedData.receiverId;
+        const description = parsedData.description;
+        const userProfile = await getUserProfile(userId);
         if (OnlineUsers.has(friend_id)) {
           const receiverWs = OnlineUsers.get(friend_id);
           receiverWs.send(
             JSON.stringify({
-              type: "friendRequest",
-              sender_id,
+              type: "newFriendRequest",
+              friendId: userId,
+              description,
+              avatar: userProfile.avatar,
+              nickname: userProfile.nickname,
               timestamp: new Date().toISOString(),
             })
           );
-          await saveFriendRequest(sender_id, receiver_id, "pending");
+          await saveFriendRequest(userId, friend_id, "pending");
           console.log(
-            `Friend request from ${sender_id} to ${receiver_id} forwarded.`
+            `Friend request from ${userId} to ${friend_id} forwarded.`
           );
         } else {
-          await saveFriendRequest(sender_id, receiver_id, "pending");
+          await saveFriendRequest(userId, friend_id, "pending");
           console.log(
-            `Friend request from ${sender_id} to ${receiver_id} saved as pending.`
+            `Friend request from ${userId} to ${friend_id} saved as pending.`
           );
         }
         break;
