@@ -12,16 +12,15 @@ const {
 } = require("./utils");
 const pool = require("./db");
 const env = require("./env");
-var sdk = require('@baiducloud/sdk');
-var BosClient = sdk.BosClient;
+
+const OSS = require('ali-oss');
 const config = {
-  endpoint: 'su.bcebos.com',         //传入Bucket所在区域域名
-  credentials: {
-      ak: env.CLOUD_API_KEY,         //您的AccessKey
-      sk: env.SECRET_KEY       //您的SecretAccessKey
-  }
+  region: 'oss-cn-nanjing',
+  accessKeyId: process.env.ACCESS_KEY_ID,
+  accessKeySecret: process.env.ACCESS_KEY_SECRET,
+  authorizationV4: true,
+  bucket: 'aichatapp-image',
 };
-const bucket = 'aichatapp-image';
 
 const saltRounds = 10;
 /**
@@ -36,8 +35,11 @@ const { getAIResponse } = require("./aichat");
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({extended: true}))
 app.use(cors());
+// app.use(JSON.stringify({ limit: '10mb' }));
+// app.use(urlencoded({ limit: '10mb', extended: true }));
 
 app.use((req, res, next) => {
   const isWebSocket =
@@ -369,25 +371,57 @@ app.post("/api/fetchChatHistory", async (req, res) => {
     res.status(500).json({ error: "Database query failed" });
   }
 });
+
 app.post("/api/putImage", async (req, res) => {
-  let client = new BosClient(config);
-  client.putObject(bucket, req.header("Object-Key"), req.body).then(function (response) {
-    // console.log('Put object:', response.body);
-  }).catch(function (error) {
+  console.log("putImage request");
+  let objectKey = req.header(`Object-Key`).toString();
+  console.log(objectKey);
+
+  let imageToSend = req.body.content;
+  console.log(`File size: ${imageToSend.length} bytes`);
+
+  const client = new OSS(config);
+
+  try {
+    await client.put(objectKey, Buffer.from(imageToSend, 'ascii'));
+    console.log('success');
+    return res.status(200).json({ success: true });
+  } catch (error) {
     console.error('Error:', error);
     return res.status(500).json({ error: "Internal server error" });
-  });
-  return res.status(200).json({ success: true }); 
+  }
 });
 app.post("/api/fetchImage", async (req, res) => {
-  let client = new BosClient(config);
-  client.getObject(bucket, req.header("Object-Key")).then(function (response) {
-    // console.log('Get object:', response.body);
-  }).catch(function (error) {
+  console.log("fetchImage request");
+  let objectKey = req.header(`Object-Key`).toString();
+  console.log(objectKey);
+
+  const client = new OSS(config);
+
+  try {
+    let response = await client.get(objectKey);
+    console.log('success');
+    return res.status(200).send(response.content);
+  } catch (error) {
     console.error('Error:', error);
     return res.status(500).json({ error: "Internal server error" });
-  });
-  return res.status(200).send(response.body);
+  }
+});
+app.post("/api/fetchUrl", async (req, res) => {
+  console.log("fetchUrl request");
+  let objectKey = req.header(`Object-Key`).toString();
+  console.log(objectKey);
+
+  const client = new OSS(config);
+
+  try {
+    let response = await client.asyncSignatureUrl(objectKey);
+    console.log('success');
+    return res.status(200).send(response);
+  } catch (error) {
+    console.error('Error:', error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 // 启动服务器
