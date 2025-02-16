@@ -403,51 +403,19 @@ app.post("/api/fetchChatHistory", async (req, res) => {
     res.status(500).json({ error: "Database query failed" });
   }
 });
-
-app.post("/api/putImage", async (req, res) => {
-  console.log("putImage request");
-  let objectKey = req.header(`Object-Key`).toString();
-  console.log(objectKey);
-
-  let imageToSend = req.body.content;
-  console.log(`File size: ${imageToSend.length} bytes`);
-
-  const client = new OSS(config);
-
-  try {
-    await client.put(objectKey, Buffer.from(imageToSend, 'ascii'));
-    console.log('success');
-    return res.status(200).json({ success: true });
-  } catch (error) {
-    console.error('Error:', error);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
-app.post("/api/fetchImage", async (req, res) => {
-  console.log("fetchImage request");
-  let objectKey = req.header(`Object-Key`).toString();
-  console.log(objectKey);
-
-  const client = new OSS(config);
-
-  try {
-    let response = await client.get(objectKey);
-    console.log('success');
-    return res.status(200).send(response.content);
-  } catch (error) {
-    console.error('Error:', error);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
 app.post("/api/fetchUrl", async (req, res) => {
   console.log("fetchUrl request");
   let objectKey = req.header(`Object-Key`).toString();
+  let method = req.header(`Method`).toString();
+  let contentType = req.header(`Content-Type`).toString();
   console.log(objectKey);
+  console.log(method);
+  console.log(contentType);
 
   const client = new OSS(config);
 
   try {
-    let response = await client.asyncSignatureUrl(objectKey);
+    let response = await client.asyncSignatureUrl(objectKey, {expires: 60, method: method, "Content-Type": method == 'PUT'? contentType: null});
     console.log('success');
     return res.status(200).send(response);
   } catch (error) {
