@@ -439,8 +439,8 @@ app.post("/api/fetchImage", async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
-app.post("/api/fetchUrl", async (req, res) => {
-  console.log("fetchUrl request");
+app.post("/api/getSignature", async (req, res) => {
+  console.log("getSignature request");
   let objectKey = req.header(`Object-Key`).toString();
   console.log(objectKey);
 
@@ -448,6 +448,26 @@ app.post("/api/fetchUrl", async (req, res) => {
 
   try {
     let response = await client.asyncSignatureUrl(objectKey);
+    console.log('success');
+    return res.status(200).send(response);
+  } catch (error) {
+    console.error('Error:', error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+app.post("/api/fetchUrl", async (req, res) => {
+  console.log("fetchUrl request");
+  let objectKey = req.header(`Object-Key`).toString();
+  let method = req.header(`Method`).toString();
+  let contentType = req.header(`Content-Type`).toString();
+  console.log(objectKey);
+  console.log(method);
+  console.log(contentType);
+
+  const client = new OSS(config);
+
+  try {
+    let response = await client.asyncSignatureUrl(objectKey, {expires: 60, method: method, "Content-Type": method == 'PUT'? contentType: null});
     console.log('success');
     return res.status(200).send(response);
   } catch (error) {
