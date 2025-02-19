@@ -1,4 +1,4 @@
-const pool = require("./db");
+const pool = require("./localdb");
 const crypto = require("crypto");
 const algorithm = "aes-256-cbc";
 const key = crypto.randomBytes(32);
@@ -131,7 +131,7 @@ async function readMessage(userId, senderId) {
     const query = `
       UPDATE messages 
       SET is_received = 1 
-      WHERE receiver_id = ? AND sender_id = ? AND is_received = 0
+      WHERE receiver_id = ? AND sender_id = ? 
     `;
     const [results] = await pool.query(query, [userId, senderId]);
     return results;
@@ -148,4 +148,5 @@ module.exports = {
   checkUserType,
   saveFriendRequest,
   getUserProfile,
+  readMessage,
 };

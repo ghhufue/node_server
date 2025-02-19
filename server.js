@@ -11,6 +11,7 @@ const {
   checkUserType,
   saveFriendRequest,
   getUserProfile,
+  readMessage,
 } = require("./utils");
 const pool = require("./localdb");
 const env = require("./env");
@@ -358,8 +359,8 @@ wss.on("connection", (ws, req) => {
         break;
       case "readMessage":
         const senderId = parsedData.senderId;
-        await readMessage(userId, senderId);
-        console.log(`Messages from ${senderId} to ${userId} marked as read.`);
+        const result = await readMessage(userId, senderId);
+        console.log(`Messages from ${senderId} to ${userId} marked as read, count: ${result.affectedRows}`);
         break;
     }
   });
