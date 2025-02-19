@@ -12,7 +12,7 @@ const {
   saveFriendRequest,
   getUserProfile,
 } = require("./utils");
-const pool = require("./db");
+const pool = require("./localdb");
 const env = require("./env");
 
 const OSS = require('ali-oss');
@@ -227,7 +227,7 @@ wss.on("connection", (ws, req) => {
       case "connect":
         ws.userId = userId;
         OnlineUsers.set(userId, ws);
-        ws.send("Welcome to the WebSocket server!");
+        console.log("Welcome to the WebSocket server!");
         break;
       case "sendMessage":
         //console.log(parsedData);
@@ -355,6 +355,11 @@ wss.on("connection", (ws, req) => {
             `Friend request from ${userId} to ${friend_id} saved as pending.`
           );
         }
+        break;
+      case "readMessage":
+        const senderId = parsedData.senderId;
+        await readMessage(userId, senderId);
+        console.log(`Messages from ${senderId} to ${userId} marked as read.`);
         break;
     }
   });

@@ -125,6 +125,22 @@ async function getUserProfile(userId) {
     return null;
   }
 }
+
+async function readMessage(userId, senderId) {
+  try {
+    const query = `
+      UPDATE messages 
+      SET is_received = 1 
+      WHERE receiver_id = ? AND sender_id = ? AND is_received = 0
+    `;
+    const [results] = await pool.query(query, [userId, senderId]);
+    return results;
+  } catch (error) {
+    console.error("Error reading message:", error);
+    throw error;
+  }
+}
+
 module.exports = {
   encryptPhoneNumber,
   decryptPhoneNumber,
