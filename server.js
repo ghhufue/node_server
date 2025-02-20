@@ -375,20 +375,20 @@ wss.on("connection", (ws, req) => {
 app.post("/api/fetchChatHistory", async (req, res) => {
   console.log("fetchChatHistory request");
   console.log(req.body);
-  const { userId: user_id, friendId: friend_id, messageNum: n } = req.body;
+  const { userId: user_id, friendId: friend_id } = req.body;
 
-  if (!user_id || !friend_id || !n) {
+  if (!user_id || !friend_id) {
     return res.status(400).json({ error: "Missing required parameters" });
   }
 
   const query = `
     SELECT * FROM messages
     WHERE 
-      (sender_id = ? AND receiver_id = ?)
+      ((sender_id = ? AND receiver_id = ?)
       OR 
-      (sender_id = ? AND receiver_id = ?)
+      (sender_id = ? AND receiver_id = ?))
+      AND is_received = 0
     ORDER BY timestamp DESC
-    LIMIT ?
   `;
 
   try {
@@ -397,7 +397,6 @@ app.post("/api/fetchChatHistory", async (req, res) => {
       friend_id,
       friend_id,
       user_id,
-      parseInt(n),
     ]);
     const reorderedResults = results.map((message, index) => {
       return { ...message, message_id: index + 1 };
