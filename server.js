@@ -11,17 +11,18 @@ const {
   checkUserType,
   saveFriendRequest,
   getUserProfile,
+  updateRelation,
 } = require("./utils");
 const pool = require("./db");
 const env = require("./env");
 
-const OSS = require('ali-oss');
+const OSS = require("ali-oss");
 const config = {
-  region: 'oss-cn-nanjing',
+  region: "oss-cn-nanjing",
   accessKeyId: process.env.ACCESS_KEY_ID,
   accessKeySecret: process.env.ACCESS_KEY_SECRET,
   authorizationV4: true,
-  bucket: 'aichatapp-image',
+  bucket: "aichatapp-image",
 };
 
 const saltRounds = 10;
@@ -37,8 +38,8 @@ const { getAIResponse } = require("./aichat");
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({extended: true}))
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 // app.use(JSON.stringify({ limit: '10mb' }));
 // app.use(urlencoded({ limit: '10mb', extended: true }));
@@ -116,7 +117,7 @@ app.post("/api/register", async (req, res) => {
 
 // Delete.
 app.delete("/api/delete", (req, res) => {
-  const userId = req.params.id;
+  const userId = req.body.id;
   const query = "DELETE FROM users WHERE id = ?";
 
   pool.query(query, [userId], (err, results) => {
@@ -329,7 +330,7 @@ wss.on("connection", (ws, req) => {
           console.log(response);
         }
         break;
-      case "sendFriendRequest":
+      case "sendFriendRequest": {
         const friend_id = parsedData.receiverId;
         const description = parsedData.description;
         const userProfile = await getUserProfile(userId);
@@ -356,6 +357,7 @@ wss.on("connection", (ws, req) => {
           );
         }
         break;
+      }
     }
   });
   ws.on("close", () => {
@@ -415,13 +417,28 @@ app.post("/api/fetchUrl", async (req, res) => {
   const client = new OSS(config);
 
   try {
-    let response = await client.asyncSignatureUrl(objectKey, {expires: 60, method: method, "Content-Type": method == 'PUT'? contentType: null});
-    console.log('success');
+    let response = await client.asyncSignatureUrl(objectKey, {
+      expires: 60,
+      method: method,
+      "Content-Type": method == "PUT" ? contentType : null,
+    });
+    console.log("success");
     return res.status(200).send(response);
   } catch (error) {
-    console.error('Error:', error);
+    console.error("Error:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
+});
+app.post("/api/updateFriendRequest", async (req, res) => {
+  const { userId, friendId, status } = req.body;
+  const result = await updateRelation(userId, friendId, status);
+  const requestStatus = result.success ? "success" : "fail";
+  res.json({
+    type: "friendRequestResponse",
+    friendId: friendId,
+    requestStatus: requestStatus,
+    message: result.message
+  });
 });
 
 // 启动服务器
