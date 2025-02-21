@@ -245,38 +245,71 @@ wss.on("connection", (ws, req) => {
         if (!usertype) {
           const content = parsedData.content;
           console.log("The receiver is human");
-          if (OnlineUsers.has(receiver_id)) {
-            const receiverWs = OnlineUsers.get(receiver_id);
-            receiverWs.send(
-              JSON.stringify({
-                type: "newMessage",
-                sender_id,
-                content,
-                timestamp: new Date().toISOString(),
-              })
-            );
-
-            await saveMessage(
+          if (OnlineUsers.has(receiver_id)) { // 对方在线
+            saveMessage(
               sender_id,
               receiver_id,
               content,
               message_type,
               true
-            );
-            console.log(
-              `Message from ${sender_id} to ${receiver_id}, type ${message_type} forwarded.`
-            );
+            ).then((result) => {
+              // 向对方发送消息
+              const receiverWs = OnlineUsers.get(receiver_id);
+              receiverWs.send(
+                JSON.stringify({
+                  type: "newMessage",
+                  message_id: result.message_id,
+                  sender_id: result.sender_id,
+                  content: result.content,
+                  message_type: result.message_type,
+                  timestamp: result.timestamp,
+                })
+              );
+
+              // 向自己返回消息的时间戳
+              const senderWs = OnlineUsers.get(sender_id);
+              senderWs.send(
+                JSON.stringify({
+                  type: "messageReturn",
+                  message_id: result.message_id,
+                  receiver_id: result.receiver_id,
+                  content: result.content,
+                  message_type: result.message_type,
+                  timestamp: result.timestamp,
+                })
+              );
+
+              // 输出日志
+              console.log(
+                `Message from ${sender_id} to ${receiver_id}, type ${message_type} forwarded, timestamp ${result.timestamp}.`
+              );
+            });
           } else {
-            await saveMessage(
+            saveMessage(
               sender_id,
               receiver_id,
               content,
               message_type,
               false
-            );
-            console.log(
-              `Message from ${sender_id} to ${receiver_id}, type ${message_type} saved as undelivered.`
-            );
+            ).then((result) => {
+              // 向自己返回消息的时间戳
+              const senderWs = OnlineUsers.get(sender_id);
+              senderWs.send(
+                JSON.stringify({
+                  type: "messageReturn",
+                  message_id: result.message_id,
+                  receiver_id: result.receiver_id,
+                  content: result.content,
+                  message_type: result.message_type,
+                  timestamp: result.timestamp,
+                })
+              );
+
+              // 输出日志
+              console.log(
+                `Message from ${sender_id} to ${receiver_id}, type ${message_type} saved as undelivered, timestamp ${result.timestamp}.`
+              );
+            });
           }
         } else {
           console.log("The receiver is bot");
@@ -288,7 +321,25 @@ wss.on("connection", (ws, req) => {
             lastmessage.content,
             `"${lastmessage.messageType}"`,
             true
-          );
+          ).then((result) => {
+            // 向自己返回消息的时间戳
+            const senderWs = OnlineUsers.get(sender_id);
+            senderWs.send(
+              JSON.stringify({
+                type: "messageReturn",
+                message_id: result.message_id,
+                receiver_id: result.receiver_id,
+                content: result.content,
+                message_type: result.message_type,
+                timestamp: result.timestamp,
+              })
+            );
+
+            // 输出日志
+            console.log(
+              `Message from ${sender_id} to ${receiver_id}, type ${message_type} saved as undelivered, timestamp ${result.timestamp}.`
+            );
+          });
           //console.log(messages);
           const modelId = "Qwen/Qwen2-7B-Instruct-GGUF";
           const apiKey = "7861e011-ca80-4dcb-b9fe-0801460a4087";
@@ -310,14 +361,32 @@ wss.on("connection", (ws, req) => {
                 response,
                 timestamp: new Date().toISOString(),
               })
-            );
+            )
             saveMessage(
               lastmessage.receiver_id,
               lastmessage.sender_id,
               response,
               `"${lastmessage.messageType}"`,
               true
-            );
+            ).then((result) => {
+              // 向对方发送消息
+              const senderWs = OnlineUsers.get(sender_id);
+              senderWs.send(
+                JSON.stringify({
+                  type: "newMessage",
+                  message_id: result.message_id,
+                  sender_id: result.sender_id,
+                  content: result.content,
+                  message_type: result.message_type,
+                  timestamp: result.timestamp,
+                })
+              );
+  
+              // 输出日志
+              console.log(
+                `Message from ${sender_id} to ${receiver_id}, type ${message_type} forwarded, timestamp ${result.timestamp}.`
+              );
+            });
           } else {
             saveMessage(
               lastmessage.receiver_id,
@@ -325,7 +394,25 @@ wss.on("connection", (ws, req) => {
               response,
               `"${lastmessage.messageType}"`,
               false
-            );
+            ).then((result) => {
+              // 向对方发送消息
+              const senderWs = OnlineUsers.get(sender_id);
+              senderWs.send(
+                JSON.stringify({
+                  type: "newMessage",
+                  message_id: result.message_id,
+                  sender_id: result.sender_id,
+                  content: result.content,
+                  message_type: result.message_type,
+                  timestamp: result.timestamp,
+                })
+              );
+  
+              // 输出日志
+              console.log(
+                `Message from ${sender_id} to ${receiver_id}, type ${message_type} saved as undelivered, timestamp ${result.timestamp}.`
+              );
+            });
           }
           console.log(response);
         }

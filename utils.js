@@ -33,19 +33,27 @@ async function saveMessage(
 ) {
   //console.log('Pool:', pool);
   const query = `
-    INSERT INTO messages (sender_id, receiver_id, content, message_type, is_received)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO messages (sender_id, receiver_id, content, message_type, is_received, timestamp)
+    VALUES (?, ?, ?, ?, ?, ?)
   `;
   return new Promise((resolve, reject) => {
+    let date = new Date();
     pool.query(
       query,
-      [sender_id, receiver_id, content, message_type, is_received],
+      [sender_id, receiver_id, content, message_type, is_received, date.toISOString().replace('T', ' ').replace('Z', '')],
       (err, results) => {
         if (err) {
           console.error("Error saving message to database:", err.message);
           return reject(err);
         }
-        resolve(results);
+        resolve({
+          message_id: results[0].message_id,
+          sender_id: results[0].sender_id,
+          receiver_id: results[0].receiver_id,
+          content: results[0].content,
+          message_type: results[0].message_type,
+          timestamp: results[0].timestamp.replace(' ', 'T').append('Z'),
+        });
       }
     );
   });
