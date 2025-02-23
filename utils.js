@@ -36,28 +36,53 @@ async function saveMessage(
     INSERT INTO messages (sender_id, receiver_id, content, message_type, is_received, timestamp)
     VALUES (?, ?, ?, ?, ?, ?)
   `;
+  try {
+    let connection = await pool.getConnection();
+    await connection.query(query, [
+      sender_id,
+      receiver_id,
+      content,
+      message_type,
+      is_received,
+      new Date().toISOString(),
+    ]);
+    const [results] = await connection.query('SELECT message_id, timestamp FROM messages WHERE message_id = LAST_INSERT_ID()');
+    connection.release();
+
+    return {      
+      message_id: results[0].message_id,
+      timestamp: results[0].timestamp,
+    };
+  } catch (error) {
+    console.error("Error saving message to database:", error.message);
+    throw error;
+  }
+}
+/*
   return new Promise((resolve, reject) => {
-    let date = new Date();
     pool.query(
       query,
-      [sender_id, receiver_id, content, message_type, is_received, date.toISOString().replace('T', ' ').replace('Z', '')],
+      [sender_id, receiver_id, content, message_type, is_received, new Date().toISOString().replace('T', ' ').replace('Z', '')],
       (err, results) => {
+        console.log('Inside pool.query');
         if (err) {
           console.error("Error saving message to database:", err.message);
-          return reject(err);
+          reject(err);
         }
+        console.log(`Returning the message ${results.message_id}, sender id ${results.sender_id}, receiver id ${results.receiver_id}, message type ${results.message_type}, timestamp ${results.timestamp}.`);
         resolve({
-          message_id: results[0].message_id,
-          sender_id: results[0].sender_id,
-          receiver_id: results[0].receiver_id,
-          content: results[0].content,
-          message_type: results[0].message_type,
-          timestamp: results[0].timestamp.replace(' ', 'T').append('Z'),
+          message_id: results.message_id,
+          sender_id: results.sender_id,
+          receiver_id: results.receiver_id,
+          content: results.content,
+          message_type: results.message_type,
+          timestamp: results.timestamp.replace(' ', 'T') + 'Z',
         });
       }
     );
   });
 }
+*/
 async function saveFriendRequest(sender_id, receiver_id, status) {
   try {
     const checkQuery = `
@@ -149,6 +174,21 @@ async function readMessage(userId, senderId) {
   }
 }
 
+async function markAsRead(messageId) {
+  try {
+    const query = `
+      UPDATE messages 
+      SET is_received = 1 
+      WHERE message_id = ? 
+    `;
+    const [results] = await pool.query(query, [messageId]);
+    return results;
+  } catch (error) {
+    console.error("Error marking message as read:", error);
+    throw error;
+  }
+}
+
 module.exports = {
   encryptPhoneNumber,
   decryptPhoneNumber,
@@ -157,4 +197,5 @@ module.exports = {
   saveFriendRequest,
   getUserProfile,
   readMessage,
+  markAsRead,
 };
