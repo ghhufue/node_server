@@ -12,6 +12,8 @@ const {
   saveFriendRequest,
   getUserProfile,
   updateRelation,
+  readMessage,
+  markAsRead,
 } = require("./utils");
 const pool = require("./db");
 const env = require("./env");
@@ -228,7 +230,7 @@ wss.on("connection", (ws, req) => {
       case "connect":
         ws.userId = userId;
         OnlineUsers.set(userId, ws);
-        ws.send("Welcome to the WebSocket server!");
+        console.log("Welcome to the WebSocket server!");
         break;
       case "sendMessage":
         //console.log(parsedData);
@@ -242,92 +244,138 @@ wss.on("connection", (ws, req) => {
           console.error("Error:", error.message);
         }); // true for bot
         console.log(`usertype: ${usertype}`);
-        if (!usertype) {
+        
+        if (!usertype) { // 对方是人
           const content = parsedData.content;
           console.log("The receiver is human");
-          if (OnlineUsers.has(receiver_id)) {
-            const receiverWs = OnlineUsers.get(receiver_id);
-            receiverWs.send(
-              JSON.stringify({
-                type: "newMessage",
-                sender_id,
-                content,
-                timestamp: new Date().toISOString(),
-              })
-            );
-
-            await saveMessage(
-              sender_id,
-              receiver_id,
-              content,
-              message_type,
-              true
-            );
-            console.log(
-              `Message from ${sender_id} to ${receiver_id}, type ${message_type} forwarded.`
-            );
-          } else {
-            await saveMessage(
+          try {
+            // 向数据库中写入消息
+            const result = await saveMessage(
               sender_id,
               receiver_id,
               content,
               message_type,
               false
             );
+
+            // 向自己返回消息的id和时间戳
+            if (OnlineUsers.has(sender_id)) {
+              const senderWs = OnlineUsers.get(sender_id);
+              senderWs.send(
+                JSON.stringify({
+                  type: "messageReturn",
+                  message_id: result.message_id,
+                  receiver_id: receiver_id,
+                  content: content,
+                  message_type: message_type,
+                  timestamp: result.timestamp,
+                })
+              );
+            }
+
+            // 向对方发送消息
+            if (OnlineUsers.has(receiver_id)) {
+              const receiverWs = OnlineUsers.get(receiver_id);
+              receiverWs.send(
+                JSON.stringify({
+                  type: "newMessage",
+                  message_id: result.message_id,
+                  sender_id: sender_id,
+                  content: content,
+                  message_type: message_type,
+                  timestamp: result.timestamp,
+                })
+              );
+              markAsRead(result.message_id); // 需要标注消息为已收到
+            }
+
+            // 输出日志
             console.log(
-              `Message from ${sender_id} to ${receiver_id}, type ${message_type} saved as undelivered.`
+              `Message from ${sender_id} to ${receiver_id}, type ${message_type} saved, timestamp ${result.timestamp}.`
             );
+            
+          } catch (error) {
+            // 发生错误
+            console.error("Error:", error.message);
           }
-        } else {
+        } else { // 对方是机器人
           console.log("The receiver is bot");
           const messages = parsedData.historyMessages;
           const lastmessage = messages.at(-1);
-          saveMessage(
-            lastmessage.sender_id,
-            lastmessage.receiver_id,
-            lastmessage.content,
-            `"${lastmessage.messageType}"`,
-            true
-          );
-          //console.log(messages);
-          const modelId = "Qwen/Qwen2-7B-Instruct-GGUF";
-          const apiKey = "7861e011-ca80-4dcb-b9fe-0801460a4087";
-          const baseUrl =
-            "https://ms-fc-2ef7dfba-37f9.api-inference.modelscope.cn/v1";
-          const response = await getAIResponse(
-            modelId,
-            messages,
-            apiKey,
-            baseUrl,
-            sender_id
-          );
-          if (OnlineUsers.has(sender_id)) {
-            const senderWs = OnlineUsers.get(sender_id);
-            senderWs.send(
-              JSON.stringify({
-                type: "newMessage",
-                receiver_id,
-                response,
-                timestamp: new Date().toISOString(),
-              })
-            );
-            saveMessage(
-              lastmessage.receiver_id,
+
+          try {
+            // 第一步：保存人发出去的消息
+            // 向数据库中写入发送的消息
+            const result = await saveMessage(
               lastmessage.sender_id,
-              response,
-              `"${lastmessage.messageType}"`,
+              lastmessage.receiver_id,
+              lastmessage.content,
+              lastmessage.messageType,
               true
             );
-          } else {
-            saveMessage(
-              lastmessage.receiver_id,
+
+            // 向自己返回消息的id和时间戳
+            if (OnlineUsers.has(sender_id)) {
+              const senderWs = OnlineUsers.get(sender_id);
+              senderWs.send(
+                JSON.stringify({
+                  type: "messageReturn",
+                  message_id: result.message_id,
+                  receiver_id: receiver_id,
+                  content: content,
+                  message_type: message_type,
+                  timestamp: result.timestamp,
+                })
+              );
+            }
+
+            // 输出日志
+            console.log(
+              `Message from ${sender_id} to bot ${receiver_id}, type ${message_type} saved, timestamp ${result.timestamp}.`
+            );
+
+            // 第二步：调用 AI 模型获取回复
+            const modelId = "Qwen/Qwen2-7B-Instruct-GGUF";
+            const apiKey = "7861e011-ca80-4dcb-b9fe-0801460a4087";
+            const baseUrl =
+              "https://ms-fc-2ef7dfba-37f9.api-inference.modelscope.cn/v1";
+            const response = await getAIResponse(
+              modelId,
+              messages,
+              apiKey,
+              baseUrl,
+              sender_id
+            );
+
+            // 第三步：保存机器人回复的消息
+            // 向数据库中写入机器人回复的消息
+            const replyResult = await saveMessage(
               lastmessage.sender_id,
-              response,
-              `"${lastmessage.messageType}"`,
+              lastmessage.receiver_id,
+              replyResult,
+              lastmessage.messageType,
               false
             );
+
+            // 向发送方发送消息
+            if (OnlineUsers.has(sender_id)) {
+              const senderWs = OnlineUsers.get(sender_id);
+              senderWs.send(
+                JSON.stringify({
+                  type: "newMessage",
+                  message_id: replyResult.message_id,
+                  sender_id: replyResult.sender_id,
+                  content: response,
+                  message_type: replyResult.message_type,
+                  timestamp: replyResult.timestamp,
+                })
+              );
+              markAsRead(replyResult.message_id); // 需要标注消息为已收到
+            }
+          } catch (error) {
+            // 发生错误
+            console.error("Error:", error.message);
           }
-          console.log(response);
         }
         break;
       case "sendFriendRequest": {
@@ -358,6 +406,11 @@ wss.on("connection", (ws, req) => {
         }
         break;
       }
+      case "readMessage":
+        const senderId = parsedData.senderId;
+        const result = await readMessage(userId, senderId);
+        console.log(`Messages from ${senderId} to ${userId} marked as read, count: ${result.affectedRows}`);
+        break;
     }
   });
   ws.on("close", () => {
@@ -371,20 +424,20 @@ wss.on("connection", (ws, req) => {
 app.post("/api/fetchChatHistory", async (req, res) => {
   console.log("fetchChatHistory request");
   console.log(req.body);
-  const { userId: user_id, friendId: friend_id, messageNum: n } = req.body;
+  const { userId: user_id, friendId: friend_id, afterId: after_id } = req.body;
 
-  if (!user_id || !friend_id || !n) {
+  if (!user_id || !friend_id || !after_id) {
     return res.status(400).json({ error: "Missing required parameters" });
   }
 
   const query = `
     SELECT * FROM messages
     WHERE 
-      (sender_id = ? AND receiver_id = ?)
+      ((sender_id = ? AND receiver_id = ?)
       OR 
-      (sender_id = ? AND receiver_id = ?)
-    ORDER BY timestamp DESC
-    LIMIT ?
+      (sender_id = ? AND receiver_id = ?))
+      AND message_id > ?
+    ORDER BY message_id ASC
   `;
 
   try {
@@ -393,12 +446,10 @@ app.post("/api/fetchChatHistory", async (req, res) => {
       friend_id,
       friend_id,
       user_id,
-      parseInt(n),
+      after_id,
     ]);
-    const reorderedResults = results.map((message, index) => {
-      return { ...message, message_id: index + 1 };
-    });
-    res.json({ messages: reorderedResults });
+    console.log(`Fetching ${results.length} messages`);
+    res.json({ messages: results });
     //console.log(reorderedResults);
   } catch (err) {
     console.error("Database error:", err.message);
