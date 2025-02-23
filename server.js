@@ -422,9 +422,9 @@ wss.on("connection", (ws, req) => {
 app.post("/api/fetchChatHistory", async (req, res) => {
   console.log("fetchChatHistory request");
   console.log(req.body);
-  const { userId: user_id, friendId: friend_id, afterTime: after_time } = req.body;
+  const { userId: user_id, friendId: friend_id, afterId: after_id } = req.body;
 
-  if (!user_id || !friend_id || !after_time) {
+  if (!user_id || !friend_id || !after_id) {
     return res.status(400).json({ error: "Missing required parameters" });
   }
 
@@ -434,8 +434,8 @@ app.post("/api/fetchChatHistory", async (req, res) => {
       ((sender_id = ? AND receiver_id = ?)
       OR 
       (sender_id = ? AND receiver_id = ?))
-      AND timestamp > ?
-    ORDER BY timestamp DESC
+      AND message_id > ?
+    ORDER BY message_id ASC
   `;
 
   try {
@@ -444,13 +444,10 @@ app.post("/api/fetchChatHistory", async (req, res) => {
       friend_id,
       friend_id,
       user_id,
-      after_time,
+      after_id,
     ]);
     console.log(`Fetching ${results.length} messages`);
-    const reorderedResults = results.map((message, index) => {
-      return { ...message, message_id: index + 1 };
-    });
-    res.json({ messages: reorderedResults });
+    res.json({ messages: results });
     //console.log(reorderedResults);
   } catch (err) {
     console.error("Database error:", err.message);
