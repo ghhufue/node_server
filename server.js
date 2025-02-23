@@ -14,7 +14,7 @@ const {
   readMessage,
   markAsRead,
 } = require("./utils");
-const pool = require("./localdb");
+const pool = require("./db");
 const env = require("./env");
 
 const OSS = require('ali-oss');

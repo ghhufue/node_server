@@ -1,4 +1,4 @@
-const pool = require("./localdb");
+const pool = require("./db");
 const crypto = require("crypto");
 const algorithm = "aes-256-cbc";
 const key = crypto.randomBytes(32);
