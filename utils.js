@@ -110,15 +110,17 @@ async function saveFriendRequest(sender_id, receiver_id, status) {
       //return updateResult;
     } else {
       const insertQuery = `
-        INSERT INTO friends (user_id, friend_id, status, created_at ) 
-        VALUES (?, ?, ?, NOW())
-      `;
-
-      const [insertResult] = await pool.query(insertQuery, [
-        sender_id,
-        receiver_id,
-        status,
-      ]);
+      INSERT INTO friends (user_id, friend_id, status, created_at)
+      VALUES 
+        (?, ?, ?, NOW()), 
+        (?, ?, ?, NOW());
+    `;
+    
+    await pool.query(insertQuery, [
+      sender_id, receiver_id, status,
+      receiver_id, sender_id, status
+    ]);
+    
       console.log("Inserted new friend request");
       //return insertResult;
     }
@@ -189,6 +191,55 @@ async function markAsRead(messageId) {
   }
 }
 
+async function updateRelation(userId, friendId, status) {
+  console.log(`Update relationship between ${userId} and ${friendId}`);
+  if (status !== "accepted" && status !== "unrelated") {
+    return {
+      success: false,
+      message: 'Invalid status. Only "accepted" or "unrelated" are allowed.',
+    };
+  }
+  try {
+    const [rows] = await pool.query(
+      "SELECT * FROM friends WHERE user_id = ? AND friend_id = ?",
+      [friendId, userId]
+    );
+    if (rows.length === 0) {
+      return {
+        success: false,
+        message: "No friend request found between these users.",
+      };
+    }
+    const updatePromises = [
+      pool.query(
+        "UPDATE friends SET status = ? WHERE user_id = ? AND friend_id = ?",
+        [status, userId, friendId]
+      ),
+      pool.query(
+        "UPDATE friends SET status = ? WHERE friend_id = ? AND user_id = ?",
+        [status, userId, friendId]
+      ),
+    ];
+    const results = await Promise.all(updatePromises);
+    if (results[0][0].affectedRows > 0 && results[1][0].affectedRows > 0) {
+      return {
+        success: true,
+        message: "Friend request status updated successfully for both users.",
+      };
+    } else {
+      return {
+        success: false,
+        message: "Failed to update the status.",
+      };
+    }
+  } catch (error) {
+    console.error("Error:", error.message);
+    return {
+      success: false,
+      message: `An error occurred: ${error.message}`,
+    };
+  }
+}
 module.exports = {
   encryptPhoneNumber,
   decryptPhoneNumber,
@@ -196,6 +247,7 @@ module.exports = {
   checkUserType,
   saveFriendRequest,
   getUserProfile,
+  updateRelation,
   readMessage,
   markAsRead,
 };
